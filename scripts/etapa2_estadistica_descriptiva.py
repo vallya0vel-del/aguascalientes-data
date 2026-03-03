@@ -17,15 +17,28 @@
 
 import pandas as pd
 import numpy as np
+import matplotlib
+matplotlib.use("Agg")  # Backend sin GUI para guardar archivos
+import matplotlib.pyplot as plt
+import seaborn as sns
 import warnings, os
 
 warnings.filterwarnings("ignore")
+plt.rcParams.update({
+    "figure.dpi": 150,
+    "savefig.bbox": "tight",
+    "font.size": 9,
+    "axes.titlesize": 11,
+    "axes.labelsize": 10,
+})
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 0. CONFIGURACIÓN Y CARGA DE DATOS
 # ──────────────────────────────────────────────────────────────────────────────
 BASE_DIR  = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR  = os.path.join(BASE_DIR, "data")
+OUTPUT_DIR = os.path.join(BASE_DIR, "output")
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 RUTA_DATOS = os.path.join(DATA_DIR, "conjunto_de_datos_iter_01CSV20.csv")
 RUTA_DICC  = os.path.join(DATA_DIR, "diccionario_datos_iter_01CSV20.csv")
@@ -613,6 +626,82 @@ for i, abrev in enumerate(abrevs):
         else:
             row_str += f" {'N/A':>8s}"
     print(row_str)
+
+# ── Heatmap de correlación ──
+print("\n  Generando heatmap de correlación...")
+corr_df = pd.DataFrame(corr_matrix, index=abrevs, columns=abrevs)
+
+fig, ax = plt.subplots(figsize=(12, 10))
+mask_upper = np.triu(np.ones_like(corr_matrix, dtype=bool), k=1)
+cmap = sns.diverging_palette(250, 15, s=75, l=40, n=12, as_cmap=True)
+sns.heatmap(
+    corr_df, mask=mask_upper, annot=True, fmt=".2f", cmap=cmap,
+    center=0, vmin=-1, vmax=1, square=True, linewidths=0.5,
+    cbar_kws={"shrink": 0.8, "label": "Correlación de Pearson (r)"},
+    ax=ax
+)
+ax.set_title("Matriz de Correlación — Tasas de Acceso Digital\n"
+             "Aguascalientes, Censo 2020", fontsize=13, fontweight="bold", pad=15)
+ax.set_xticklabels(ax.get_xticklabels(), rotation=45, ha="right", fontsize=8)
+ax.set_yticklabels(ax.get_yticklabels(), rotation=0, fontsize=8)
+ruta_heatmap_corr = os.path.join(OUTPUT_DIR, "heatmap_correlacion_acceso_digital.png")
+fig.savefig(ruta_heatmap_corr, dpi=200)
+plt.close(fig)
+print(f"  ✓ Heatmap guardado en: {ruta_heatmap_corr}")
+
+# ── Heatmap de acceso digital por municipio ──
+print("\n  Generando heatmap de acceso digital por municipio...")
+nombres_mun_hm = {
+    1: "Aguascalientes", 2: "Asientos", 3: "Calvillo", 4: "Cosío",
+    5: "Jesús María", 6: "Pabellón de Arteaga", 7: "Rincón de Romos",
+    8: "San José de Gracia", 9: "Tepezalá",
+    10: "El Llano", 11: "San Fco. de los Romo"
+}
+# Usar datos de totales municipales del archivo original
+filas_mun_hm = df_raw[(df_raw["MUN"] > 0) & (df_raw["LOC"] == 0)].copy()
+for col_hm in vars_acceso_digital + ["VIVPAR_HAB"]:
+    filas_mun_hm[col_hm] = pd.to_numeric(filas_mun_hm[col_hm], errors="coerce")
+
+etiquetas_tic = {
+    "VPH_RADIO": "Radio", "VPH_TV": "TV", "VPH_PC": "PC/Laptop",
+    "VPH_TELEF": "Tel. Fijo", "VPH_CEL": "Celular",
+    "VPH_INTER": "Internet", "VPH_STVP": "TV Paga",
+    "VPH_SPMVPI": "Streaming", "VPH_CVJ": "Videojuegos",
+    "VPH_SINRTV": "Sin Radio/TV", "VPH_SINLTC": "Sin Tel.",
+    "VPH_SINCINT": "Sin PC/Internet", "VPH_SINTIC": "Sin TIC",
+}
+# Solo variables de acceso positivo (no las de carencia)
+vars_positivas = ["VPH_RADIO", "VPH_TV", "VPH_PC", "VPH_TELEF", "VPH_CEL",
+                  "VPH_INTER", "VPH_STVP", "VPH_SPMVPI", "VPH_CVJ"]
+
+rows_hm = []
+for _, row_hm in filas_mun_hm.iterrows():
+    mun_id = int(row_hm["MUN"])
+    vph = row_hm["VIVPAR_HAB"]
+    if pd.isna(vph) or vph == 0:
+        continue
+    row_data = {"Municipio": nombres_mun_hm.get(mun_id, str(mun_id))}
+    for vp in vars_positivas:
+        val_hm = row_hm[vp]
+        row_data[etiquetas_tic[vp]] = (val_hm / vph * 100) if pd.notna(val_hm) else np.nan
+    rows_hm.append(row_data)
+
+df_hm = pd.DataFrame(rows_hm).set_index("Municipio")
+
+fig2, ax2 = plt.subplots(figsize=(12, 7))
+sns.heatmap(
+    df_hm, annot=True, fmt=".1f", cmap="YlGnBu",
+    linewidths=0.5, cbar_kws={"label": "% de viviendas habitadas", "shrink": 0.85},
+    ax=ax2, vmin=0, vmax=100
+)
+ax2.set_title("Acceso Digital por Municipio (% de viviendas habitadas)\n"
+              "Aguascalientes, Censo 2020", fontsize=13, fontweight="bold", pad=15)
+ax2.set_xticklabels(ax2.get_xticklabels(), rotation=45, ha="right", fontsize=9)
+ax2.set_yticklabels(ax2.get_yticklabels(), rotation=0, fontsize=9)
+ruta_heatmap_mun = os.path.join(OUTPUT_DIR, "heatmap_acceso_digital_municipio.png")
+fig2.savefig(ruta_heatmap_mun, dpi=200)
+plt.close(fig2)
+print(f"  ✓ Heatmap guardado en: {ruta_heatmap_mun}")
 
 # ── 4b. Correlaciones más fuertes ──
 print(f"\n  4b. CORRELACIONES MÁS FUERTES (|r| > 0.7)")
