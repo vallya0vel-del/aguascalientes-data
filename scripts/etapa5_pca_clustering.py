@@ -513,12 +513,14 @@ for c in range(k_optimo):
 # ── 3c. Visualización en espacio PCA ──
 fig_kmeans, ax_km = plt.subplots(figsize=(12, 10))
 
-colors_cluster = plt.cm.Set1(np.linspace(0, 0.8, k_optimo))
+# Paleta de colores con alto contraste entre clusters
+_palette = ["#2166AC", "#D6604D", "#4DAC26", "#8B00FF", "#FF8C00", "#1B9E77", "#E7298A"]
+colors_cluster = [_palette[i % len(_palette)] for i in range(k_optimo)]
 cluster_patches = []
 for c in range(k_optimo):
     mask_c = labels_final == c
     ax_km.scatter(scores[mask_c, 0], scores[mask_c, 1],
-                  c=[colors_cluster[c]], s=15, alpha=0.5,
+                  color=colors_cluster[c], s=15, alpha=0.5,
                   label=f"Cluster {c} (n={mask_c.sum():,})")
     cluster_patches.append(mpatches.Patch(color=colors_cluster[c],
                                            label=f"Cluster {c} (n={mask_c.sum():,})"))
@@ -889,7 +891,7 @@ for c in range(k_optimo):
     mask_c = df_geo_cl["CLUSTER_KMEANS"] == c
     sub = df_geo_cl[mask_c]
     ax_geo.scatter(sub["LON_DEC"], sub["LAT_DEC"],
-                   c=[colors_cluster[c]],
+                   color=colors_cluster[c],
                    s=sub["POBTOT"].clip(upper=5000) / 100 + 5,
                    alpha=0.6, edgecolors="black", linewidths=0.2,
                    zorder=2,
